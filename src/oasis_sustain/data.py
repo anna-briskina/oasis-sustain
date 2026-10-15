@@ -22,11 +22,11 @@ def tidy_ext_vars(ext_vars) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def fetch_oasis(data_dir, n_subjects=None) -> pd.DataFrame:
-    """Download (or load cached) OASIS-1 DARTEL VBM maps. Returns one row per subject."""
+def fetch_oasis(data_dir, n_subjects=None, dartel: bool = True) -> pd.DataFrame:
+    """Download (or load cached) OASIS-1 VBM maps (DARTEL or standard SPM8). One row per subject."""
     from nilearn import datasets
 
-    ds = datasets.fetch_oasis_vbm(n_subjects=n_subjects, data_dir=str(data_dir))
+    ds = datasets.fetch_oasis_vbm(n_subjects=n_subjects, dartel_version=dartel, data_dir=str(data_dir))
     meta = tidy_ext_vars(ds.ext_vars)
     gm = list(ds.gray_matter_maps)
     if len(gm) != len(meta):

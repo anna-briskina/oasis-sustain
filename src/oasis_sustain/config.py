@@ -18,6 +18,7 @@ DEFAULTS: dict = {
         "min_age": 60,                    # OASIS-1 subjects < 60 have no CDR
         "require_cdr": True,
         "n_subjects": None,               # None = all subjects nilearn provides
+        "dartel_version": True,           # False = nilearn's standard SPM8-normalised maps
     },
     "atlases": ["cort-maxprob-thr25-2mm", "sub-maxprob-thr25-2mm"],
     # feature name -> Harvard-Oxford label names (union of voxels, both hemispheres)

@@ -33,7 +33,7 @@ def main():
     cfg = config.load_config(args.config)
     dirs = config.run_dirs(cfg)
 
-    meta = data.fetch_oasis(dirs["data"], cfg["cohort"]["n_subjects"])
+    meta = data.fetch_oasis(dirs["data"], cfg["cohort"]["n_subjects"], cfg["cohort"]["dartel_version"])
     paths = meta["gm_path"].tolist()
     ref = image.load_img(paths[0])
     print("GM map shape:", ref.shape[:3], " voxel size:", np.round(ref.header.get_zooms()[:3], 2))

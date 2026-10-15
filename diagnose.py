@@ -40,7 +40,7 @@ def main():
     f = run._files(cfg, dirs)
 
     print("=== 1. Alignment of GM maps and metadata ===")
-    meta = data.fetch_oasis(dirs["data"], cfg["cohort"]["n_subjects"])
+    meta = data.fetch_oasis(dirs["data"], cfg["cohort"]["n_subjects"], cfg["cohort"]["dartel_version"])
     names = meta["gm_path"].map(lambda p: os.path.basename(str(p)))
     ok = np.array([str(i) in n for i, n in zip(meta["id"], names)])
     print(f"{ok.sum()}/{len(ok)} rows: filename contains the row's subject ID")

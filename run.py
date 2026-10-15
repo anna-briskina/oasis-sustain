@@ -42,7 +42,7 @@ def _files(cfg, dirs):
 def step_prepare(cfg, dirs, f):
     zc = cfg["zscore"]
     print("Fetching OASIS-1 VBM via nilearn (first run downloads ~1 GB)...")
-    meta = data.fetch_oasis(dirs["data"], cfg["cohort"]["n_subjects"])
+    meta = data.fetch_oasis(dirs["data"], cfg["cohort"]["n_subjects"], cfg["cohort"]["dartel_version"])
     cohort = data.select_cohort(meta, cfg["cohort"], zc["covariates"])
     print(f"Cohort: {len(cohort)} subjects ({cohort.is_patient.sum()} CDR>0, "
           f"{(cohort.is_patient == 0).sum()} CDR=0), age >= {cfg['cohort']['min_age']}")
