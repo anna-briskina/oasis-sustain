@@ -1,11 +1,12 @@
 # Full run: 13 a priori AD-relevant regions, up to 3 subtypes.
 # Expect several hours on a laptop CPU (CV refits every fold); set sustain.parallel: true
 # to use pathos multiprocessing across start points.
-name: oasis1_full
+name: oasis1_full_spm8
 seed: 42
 
 cohort:
   min_age: 60
+  dartel_version: false   # DARTEL maps failed the GM-fraction-vs-age check; see README
 
 # Regions chosen from the AD literature BEFORE looking at the data, so the feature set
 # is not tuned on the same subjects SuStaIn is fit to. Labels are Harvard-Oxford names

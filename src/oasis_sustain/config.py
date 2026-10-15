@@ -28,7 +28,8 @@ DEFAULTS: dict = {
         "levels": [1, 2, 3],
         "min_patient_frac": 0.10,         # keep a z level only if >= this fraction of patients reach it
         "z_max_percentile": 99,
-        "outlier_abs_z": 8,               # |z| beyond this in any region -> excluded as QC failure
+        "homogeneity_robust_z": 4,        # primary QC: map-to-mean correlation this far below median
+        "outlier_abs_z": 15,              # safety net: |robust z| beyond this in any region
         "max_exclude_frac": 0.05,         # abort if QC would drop more than this fraction
         "clip_min": -3,                  # lower clip; upper clip is each biomarker's Z_max
     },

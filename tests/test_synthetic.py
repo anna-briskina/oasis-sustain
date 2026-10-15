@@ -45,6 +45,26 @@ def test_tidy_ext_vars_handles_bytes_recarray():
     assert list(df["sex_m"]) == [0.0, 1.0]
 
 
+def test_align_maps_by_id_not_position():
+    meta = pd.DataFrame({"id": ["OAS1_0001_MR1", "OAS1_0002_MR1", "OAS1_0004_MR1"], "age": [70, 80, 90]})
+    paths = ["/d/mwc1OAS1_0004_MR1_mpr.nii.gz", "/d/mwc1OAS1_0001_MR1_mpr.nii.gz",
+             "/d/mwc1OAS1_0003_MR1_mpr.nii.gz", "/d/mwc1OAS1_0002_MR1_mpr.nii.gz"]
+    out = data.align_maps(meta, paths)
+    assert len(out) == 3
+    for _, r in out.iterrows():
+        assert r["id"] in r["gm_path"]
+    assert out.set_index("id").loc["OAS1_0004_MR1", "age"] == 90
+
+
+def test_align_maps_drops_white_matter_files():
+    meta = pd.DataFrame({"id": ["OAS1_0001_MR1", "OAS1_0002_MR1"], "age": [70, 80]})
+    paths = ["d/OAS1_0001_MR1/mwc1OAS1_0001_MR1_mpr.nii.gz",
+             "d/OAS1_0001_MR1/mwc2OAS1_0001_MR1_mpr.nii.gz",
+             "d/OAS1_0002_MR1/mwrc1OAS1_0002_MR1_mpr.nii.gz"]
+    out = data.align_maps(meta, paths)
+    assert len(out) == 2 and not out["gm_path"].str.contains("c2OAS1").any()
+
+
 def test_select_cohort():
     meta = pd.DataFrame({"age": [30, 65, 70, 80], "cdr": [np.nan, 0, 1, np.nan],
                          "sex_m": [1, 0, 1, 0], "etiv": [1, 1, 1, 1]})
@@ -138,6 +158,9 @@ def test_prepare_step_excludes_outliers_and_clips():
         gm.loc[7, "r2"] = 5.0  # a corrupted map: absurd z
         gm.insert(0, "id", meta["id"])
         gm.to_csv(f["regional"], index=False)  # cache hit -> no nilearn needed
+        hc = np.full(n, 0.95) + RNG.normal(0, 0.005, n)
+        hc[12] = 0.70  # a failed segmentation: low correlation with the mean map
+        pd.DataFrame({"id": meta["id"], "map_corr": hc}).to_csv(f["homog"], index=False)
 
         orig = run.data.fetch_oasis
         run.data.fetch_oasis = lambda *a, **k: meta.copy()
@@ -146,9 +169,10 @@ def test_prepare_step_excludes_outliers_and_clips():
         finally:
             run.data.fetch_oasis = orig
         qc = pd.read_csv(dirs["out"] / "qc_excluded.csv")
-        assert qc["id"].tolist() == [meta.loc[7, "id"]]
+        assert sorted(qc["id"]) == sorted([meta.loc[7, "id"], meta.loc[12, "id"]])
+        assert set(qc["reason"]) == {"low map homogeneity", "extreme regional value"}
         d = run.load_npz(f["inputs"])
-        assert len(d["z"]) == n - 1
+        assert len(d["z"]) == n - 2
         assert (d["z"] <= d["Z_max"][None, :] + 1e-9).all() and (d["z"] >= -3 - 1e-9).all()
 
 
@@ -168,6 +192,7 @@ def test_prepare_refuses_to_exclude_real_disease():
         gm = pd.DataFrame({"id": meta["id"], "r1": 0.5 - 0.002 * meta.age - 0.03 * (meta.cdr > 0)
                            + RNG.normal(0, 1e-6, len(meta))})
         gm.to_csv(f["regional"], index=False)
+        pd.DataFrame({"id": meta["id"], "map_corr": 0.95 + RNG.normal(0, 0.005, len(meta))}).to_csv(f["homog"], index=False)
         orig = run.data.fetch_oasis
         run.data.fetch_oasis = lambda *a, **k: meta.copy()
         try:
