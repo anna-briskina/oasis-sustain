@@ -9,7 +9,7 @@ seed: 42
 
 cohort:
   min_age: 60
-  dartel_version: false   # DARTEL maps failed the GM-fraction-vs-age check; see README
+  dartel_version: false   # DARTEL maps failed the GM-fraction-vs-age check; see TECHNICAL.md
 
 # Regions chosen from the AD literature BEFORE looking at the data, so the feature set
 # is not tuned on the same subjects SuStaIn is fit to. Labels are Harvard-Oxford names
