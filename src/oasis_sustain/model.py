@@ -48,6 +48,20 @@ def cross_validate(sustain, test_idxs):
     return np.asarray(cvic, float), np.asarray(loglike, float)
 
 
+def assign_from_samples(sustain, z, res: dict, n_samples: int = 1000) -> dict:
+    """Subtype and stage per person, recomputed from the SAME posterior samples as the figures.
+
+    pySuStaIn's pickled ml_subtype is not guaranteed to share an ordering with its pickled
+    samples_sequence (we observed mismatches), so we never use it. Recomputing from
+    samples_sequence/samples_f makes people's labels and the plotted sequences one source.
+    """
+    out = sustain.subtype_and_stage_individuals_newData(
+        np.asarray(z, float), np.asarray(res["samples_sequence"]), np.asarray(res["samples_f"]), n_samples)
+    ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage = out[:4]
+    return {**res, "ml_subtype": ml_subtype, "prob_ml_subtype": prob_ml_subtype,
+            "ml_stage": ml_stage, "prob_ml_stage": prob_ml_stage}
+
+
 def pickle_path(sustain_dir, dataset_name: str, n_subtypes: int) -> Path:
     # pySuStaIn names results by 0-based subtype index: subtype0 = 1-subtype model
     return Path(sustain_dir) / "pickle_files" / f"{dataset_name}_subtype{n_subtypes - 1}.pickle"

@@ -183,20 +183,56 @@ def step_analyze(cfg, dirs, f):
         print(f"Selected {n} subtype(s) by lowest CVIC")
     else:
         print(f"Analysing {n} subtype(s) (set explicitly)")
-    res = model.load_result(dirs["sustain"], cfg["name"], int(n))
+    res_saved = model.load_result(dirs["sustain"], cfg["name"], int(n))
     cohort = pd.read_csv(f["subjects"])
     z = pd.DataFrame(d["z"], columns=labels)
     events = zscore.event_table(d["Z_vals"], labels)
 
+    # Assign people from the same posterior samples the figures are drawn from (see model.py).
+    s = model.make_sustain(d["z"], d["Z_vals"], d["Z_max"], labels, cfg["sustain"],
+                           dirs["sustain"], cfg["name"], cfg["seed"])
+    res = model.assign_from_samples(s, d["z"], res_saved)
+    old_sub = np.asarray(res_saved["ml_subtype"]).reshape(-1).astype(int) + 1
+    new_sub = np.asarray(res["ml_subtype"]).reshape(-1).astype(int) + 1
+    print("pySuStaIn's saved labels (rows) vs labels recomputed from the plotted samples (columns):")
+    print(pd.crosstab(old_sub, new_sub).to_string())
+
     df = analysis.subject_table(cohort, z, res)
+    M = analysis.label_sequence_alignment(z, df["subtype"].to_numpy(), df["stage"].to_numpy(),
+                                          res["samples_sequence"], events)
+    def show(M):
+        print(pd.DataFrame(M, index=[f"label {k + 1}" for k in range(len(M))],
+                           columns=[f"seq {k + 1}" for k in range(len(M))]).round(2).to_string())
+
+    print("Label/sequence alignment (rows = people's label, cols = plotted sequence):")
+    show(M)
+    best = [int(np.nanargmax(M[k])) if not np.isnan(M[k]).all() else -1 for k in range(len(M))]
+    aligned = best == list(range(len(M)))
+    relabel = None
+    if not aligned and sorted(best) == list(range(len(M))):
+        # Clean one-to-one mapping: rename people's labels to the sequence their atrophy matches.
+        relabel = {k + 1: best[k] + 1 for k in range(len(M))}
+        print(f"Relabelling people to match plotted sequences (old label -> sequence): {relabel}")
+        df["subtype"] = df["subtype"].map(lambda s: relabel.get(s, s) if s > 0 else 0)
+        M = analysis.label_sequence_alignment(z, df["subtype"].to_numpy(), df["stage"].to_numpy(),
+                                              res["samples_sequence"], events)
+        show(M)
+        aligned = [int(np.nanargmax(M[k])) for k in range(len(M))] == list(range(len(M)))
+    print("ALIGNED" if aligned else "WARNING: labels do not match the plotted sequences and no clean "
+          "mapping exists. Do not interpret subtype-level clinical differences.")
+
     summary = analysis.summarize(df, labels, res["samples_f"], cfg["analysis"]["certainty_threshold"])
     summary["n_subtypes"] = int(n)
+    summary["assignment"] = "recomputed from plotted posterior samples"
+    summary["label_sequence_alignment"] = {"aligned": bool(aligned), "matrix": np.round(M, 3).tolist(),
+                                           "relabelled": relabel}
+    summary["leading_regions_per_subtype"] = analysis.leading_regions(res["samples_sequence"], events, labels)
     df.to_csv(dirs["out"] / f"subjects_{n}subtypes.csv", index=False)
     (dirs["out"] / f"summary_{n}subtypes.json").write_text(json.dumps(summary, indent=2))
 
     plots.plot_pvd(res, events, dirs["figures"], labels)
-    plots.plot_stage_vs_clinical(df, dirs["figures"])
-    plots.plot_subtype_certainty(df, dirs["figures"])
+    plots.plot_stage_vs_clinical(df, dirs["figures"], tag=f"_{n}subtypes")
+    plots.plot_subtype_certainty(df, dirs["figures"], tag=f"_{n}subtypes")
     print(json.dumps({k: summary[k] for k in ["stage_vs_mmse_patients", "composite_vs_mmse_patients",
                                              "controls_stage0_frac", "subtype_counts_staged"]}, indent=2))
     print(f"Results in {dirs['out']}")

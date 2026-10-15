@@ -48,7 +48,7 @@ def plot_pvd(res: dict, events: pd.DataFrame, out_dir, features: list[str]):
     _save(fig, f"{out_dir}/pvd_{n_s}subtypes.png")
 
 
-def plot_stage_vs_clinical(df: pd.DataFrame, out_dir):
+def plot_stage_vs_clinical(df: pd.DataFrame, out_dir, tag: str = ""):
     fig, (a, b) = plt.subplots(1, 2, figsize=(10, 4))
     cdrs = sorted(df["cdr"].dropna().unique())
     data = [df.loc[df["cdr"] == c, "stage"] for c in cdrs]
@@ -65,7 +65,7 @@ def plot_stage_vs_clinical(df: pd.DataFrame, out_dir):
         b.scatter(d["stage"], d["mmse"], s=12, alpha=0.7, color=colour, label=g)
     b.set_xlabel("SuStaIn stage"); b.set_ylabel("MMSE"); b.legend(frameon=False)
     b.set_title("Stage vs cognition (not a model input)")
-    _save(fig, f"{out_dir}/stage_vs_clinical.png")
+    _save(fig, f"{out_dir}/stage_vs_clinical{tag}.png")
 
 
 def plot_cvic(cvic: np.ndarray, out_dir):
@@ -77,7 +77,7 @@ def plot_cvic(cvic: np.ndarray, out_dir):
     _save(fig, f"{out_dir}/cvic.png")
 
 
-def plot_subtype_certainty(df: pd.DataFrame, out_dir):
+def plot_subtype_certainty(df: pd.DataFrame, out_dir, tag: str = ""):
     staged = df[df["subtype"] > 0]
     if staged.empty:
         return
@@ -85,7 +85,7 @@ def plot_subtype_certainty(df: pd.DataFrame, out_dir):
     ax.hist(staged["prob_subtype"], bins=np.linspace(0, 1, 21), color="#7a6aa8")
     ax.set_xlabel("P(assigned subtype)"); ax.set_ylabel("Subjects (stage > 0)")
     ax.set_title("Subtype assignment certainty")
-    _save(fig, f"{out_dir}/subtype_certainty.png")
+    _save(fig, f"{out_dir}/subtype_certainty{tag}.png")
 
 
 def plot_zscores(z: pd.DataFrame, group: pd.Series, out_dir):

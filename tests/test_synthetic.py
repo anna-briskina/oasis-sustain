@@ -205,6 +205,51 @@ def test_prepare_refuses_to_exclude_real_disease():
         assert raised
 
 
+def test_analyze_relabels_scrambled_subtypes_to_match_sequences():
+    import run
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        cfg = config._merge(config.DEFAULTS, {
+            "name": "scr", "regions": {"a": ["x"], "b": ["y"], "c": ["z"], "d": ["w"]},
+            "paths": {"data_dir": f"{tmp}/raw", "processed_dir": f"{tmp}/proc", "output_dir": f"{tmp}/out"},
+            "analysis": {"n_subtypes": 3, "certainty_threshold": 0.75},
+        })
+        dirs = config.run_dirs(cfg)
+        f = run._files(cfg, dirs)
+        meta = _fake_cohort(150, 150)
+        n, R = len(meta), 4
+        orders = [[0, 1, 2, 3], [3, 2, 1, 0], [1, 3, 0, 2]]
+        sub = RNG.integers(0, 3, n)
+        stage = RNG.integers(1, 5, n)
+        z = RNG.normal(0, 0.5, (n, R))
+        for i in range(n):
+            for r in orders[sub[i]][:stage[i]]:
+                z[i, r] += 2
+        meta.to_csv(f["subjects"], index=False)
+        np.savez(f["inputs"], z=z, Z_vals=np.ones((R, 1)), Z_max=np.full(R, 4.0),
+                 labels=np.array(list("abcd")), is_patient=meta.is_patient.to_numpy())
+        scrambled = np.array([1, 2, 0])[sub]  # saved labels in a different order than sequences
+        res = {"samples_sequence": np.stack([np.tile(np.array(o)[:, None], (1, 40)) for o in orders]),
+               "samples_f": np.full((3, 40), 1 / 3), "ml_subtype": scrambled.reshape(-1, 1),
+               "prob_ml_subtype": np.ones((n, 1)), "ml_stage": stage.reshape(-1, 1),
+               "prob_ml_stage": np.ones((n, 1))}
+        p = model.pickle_path(dirs["sustain"], "scr", 3)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "wb") as fh:
+            pickle.dump(res, fh)
+        orig_make, orig_assign = run.model.make_sustain, run.model.assign_from_samples
+        run.model.make_sustain = lambda *a, **k: None
+        run.model.assign_from_samples = lambda s, z, r, **k: r  # pretend recompute keeps the mismatch
+        try:
+            run.step_analyze(cfg, dirs, f)
+        finally:
+            run.model.make_sustain, run.model.assign_from_samples = orig_make, orig_assign
+        out = pd.read_csv(dirs["out"] / "subjects_3subtypes.csv")
+        assert (out["subtype"].to_numpy() == sub + 1).mean() > 0.95  # people now match true sequences
+        summ = pd.read_json(dirs["out"] / "summary_3subtypes.json", typ="series")
+        assert summ["label_sequence_alignment"]["aligned"]
+
+
 def test_analyze_step_end_to_end_with_fake_sustain_output():
     import run
 
@@ -241,12 +286,20 @@ def test_analyze_step_end_to_end_with_fake_sustain_output():
         with open(p, "wb") as fh:
             pickle.dump(res, fh)
 
-        run.step_analyze(cfg, dirs, f)
+        # Stand-in for pySuStaIn: return the saved assignment (the real code recomputes it)
+        orig_make, orig_assign = run.model.make_sustain, run.model.assign_from_samples
+        run.model.make_sustain = lambda *a, **k: None
+        run.model.assign_from_samples = lambda s, z, r, **k: r
+        try:
+            run.step_analyze(cfg, dirs, f)
+        finally:
+            run.model.make_sustain, run.model.assign_from_samples = orig_make, orig_assign
         summ = pd.read_json(dirs["out"] / "summary_2subtypes.json", typ="series")
         assert summ["n_subtypes"] == 2
         assert summ["stage_vs_mmse_patients"]["rho"] < -0.5
         figs = {x.name for x in dirs["figures"].iterdir()}
-        assert {"pvd_2subtypes.png", "stage_vs_clinical.png", "subtype_certainty.png"} <= figs
+        assert {"pvd_2subtypes.png", "stage_vs_clinical_2subtypes.png", "subtype_certainty_2subtypes.png"} <= figs
+        assert "label_sequence_alignment" in summ and "leading_regions_per_subtype" in summ
 
 
 if __name__ == "__main__":
