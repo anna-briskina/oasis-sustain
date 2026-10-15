@@ -29,9 +29,15 @@ def load_npz(path) -> dict:
         return {k: d[k] for k in d.files}
 
 
+def _maps(cfg) -> str:
+    return "dartel" if cfg["cohort"]["dartel_version"] else "spm8"
+
+
 def _files(cfg, dirs):
     return {
-        "regional": dirs["processed"] / f"{cfg['name']}_regional_gm.csv",
+        # map version in the filename: DARTEL and SPM8 caches can never be confused
+        "regional": dirs["processed"] / f"{cfg['name']}_{_maps(cfg)}_regional_gm.csv",
+        "homog": dirs["processed"] / f"{cfg['name']}_{_maps(cfg)}_map_corr.csv",
         "inputs": dirs["out"] / "sustain_inputs.npz",
         "subjects": dirs["out"] / "cohort.csv",
         "zfit": dirs["out"] / "zscore_fit.json",
@@ -68,9 +74,25 @@ def step_prepare(cfg, dirs, f):
         bad = cohort.loc[~np.isfinite(X.to_numpy()).all(1), "id"].tolist()
         raise ValueError(f"Non-finite regional GM values for subjects {bad}")
 
-    # QC: subjects with implausible z in any region are almost always processing failures.
-    # Drop them, refit the control model without them, and report who was dropped.
-    excluded = []
+    # QC 1 (primary, disease-independent): correlation of each GM map with the sample mean.
+    # Segmentation/registration failures drop it sharply; atrophy barely moves it.
+    homog = pd.read_csv(f["homog"]) if f["homog"].exists() else None
+    if homog is None or list(homog["id"]) != list(cohort["id"]):
+        print("Computing map homogeneity (two passes over the GM maps)...")
+        homog = pd.DataFrame({"id": cohort["id"],
+                              "map_corr": features.map_homogeneity(cohort["gm_path"].tolist())})
+        homog.to_csv(f["homog"], index=False)
+    hc = homog["map_corr"].to_numpy()
+    h_rz = (hc - np.median(hc)) / (1.4826 * np.median(np.abs(hc - np.median(hc))))
+    bad_map = h_rz < -zc["homogeneity_robust_z"]
+    excluded = [{"id": cohort.loc[i, "id"], "group": cohort.loc[i, "group"], "reason": "low map homogeneity",
+                 "detail": f"corr {hc[i]:.3f} (robust z {h_rz[i]:.1f})"} for i in np.flatnonzero(bad_map)]
+    print(f"Map homogeneity: median corr {np.median(hc):.3f}, min {hc.min():.3f}")
+    keep = ~bad_map
+    cohort, X = cohort.loc[keep].reset_index(drop=True), X.loc[keep].reset_index(drop=True)
+
+    # QC 2 (safety net): absurd regional values. Loose threshold, because severe atrophy
+    # itself produces large values and must not be excluded.
     while True:
         z, fit = zscore.residual_zscores(X, cohort, cohort["is_patient"].to_numpy() == 0, zc["covariates"])
         ctrl = cohort["is_patient"].to_numpy() == 0
@@ -81,7 +103,8 @@ def step_prepare(cfg, dirs, f):
         for i in np.flatnonzero(out):
             worst = rz.iloc[i].abs().idxmax()
             excluded.append({"id": cohort.loc[i, "id"], "group": cohort.loc[i, "group"],
-                             "region": worst, "robust_z": round(float(rz.iloc[i][worst]), 1)})
+                             "reason": "extreme regional value",
+                             "detail": f"{worst} robust z {float(rz.iloc[i][worst]):.1f}"})
         keep = ~out
         cohort, X = cohort.loc[keep].reset_index(drop=True), X.loc[keep].reset_index(drop=True)
     n_start = len(cohort) + len(excluded)
@@ -91,9 +114,9 @@ def step_prepare(cfg, dirs, f):
             f"it means disease effects exceed the threshold or the control spread is tiny. "
             f"Inspect the data, or raise zscore.outlier_abs_z. First flagged: {excluded[:5]}")
     if excluded:
-        print(f"QC: excluded {len(excluded)} subject(s) with |z| > {zc['outlier_abs_z']}:")
+        print(f"QC: excluded {len(excluded)} subject(s):")
         print(pd.DataFrame(excluded).to_string(index=False))
-    pd.DataFrame(excluded, columns=["id", "group", "region", "robust_z"]).to_csv(dirs["out"] / "qc_excluded.csv", index=False)
+    pd.DataFrame(excluded, columns=["id", "group", "reason", "detail"]).to_csv(dirs["out"] / "qc_excluded.csv", index=False)
     print("z range per region:\n" + z.agg(["min", "max"]).T.round(2).to_string())
 
     z_raw = z

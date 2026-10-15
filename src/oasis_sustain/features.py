@@ -55,6 +55,32 @@ def build_region_masks(atlases, regions: dict[str, list[str]]) -> dict[str, np.n
     return masks
 
 
+def map_homogeneity(paths: list[str], threshold: float = 0.1) -> np.ndarray:
+    """Correlation of each subject's GM map with the sample mean map (two passes over files).
+
+    A failed segmentation or registration gives a sharply lower correlation; atrophy changes
+    it only modestly. This makes it a QC metric that does not depend on disease severity.
+    """
+    import nibabel as nib
+
+    def load(p):
+        return np.squeeze(np.asanyarray(nib.load(p).dataobj, dtype=np.float32))
+
+    mean = None
+    for p in paths:
+        a = load(p)
+        mean = a.astype(np.float64) if mean is None else mean + a
+    mean /= len(paths)
+    mask = mean > threshold
+    mv = mean[mask] - mean[mask].mean()
+    out = np.empty(len(paths))
+    for i, p in enumerate(paths):
+        v = load(p)[mask]
+        v = v - v.mean()
+        out[i] = float((v * mv).sum() / np.sqrt((v * v).sum() * (mv * mv).sum()))
+    return out
+
+
 def extract_regional_means(paths: list[str], masks: dict[str, np.ndarray]) -> pd.DataFrame:
     import nibabel as nib
 

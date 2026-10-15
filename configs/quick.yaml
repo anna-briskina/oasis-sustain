@@ -1,10 +1,11 @@
 # Smoke test: small model, short chains. Runs in minutes and checks every step works
 # end to end. Results are NOT meant to be interpreted.
-name: oasis1_quick
+name: oasis1_quick_spm8
 seed: 42
 
 cohort:
   min_age: 60
+  dartel_version: false   # DARTEL maps failed the GM-fraction-vs-age check; see README
 
 regions:
   hippocampus: [Left Hippocampus, Right Hippocampus]
