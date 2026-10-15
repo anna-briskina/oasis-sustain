@@ -1,0 +1,43 @@
+# Full run: 13 a priori AD-relevant regions, up to 3 subtypes.
+# Expect several hours on a laptop CPU (CV refits every fold); set sustain.parallel: true
+# to use pathos multiprocessing across start points.
+name: oasis1_full
+seed: 42
+
+cohort:
+  min_age: 60
+
+# Regions chosen from the AD literature BEFORE looking at the data, so the feature set
+# is not tuned on the same subjects SuStaIn is fit to. Labels are Harvard-Oxford names
+# (both hemispheres averaged together, voxel-weighted).
+regions:
+  hippocampus: [Left Hippocampus, Right Hippocampus]
+  amygdala: [Left Amygdala, Right Amygdala]
+  parahippocampal_ant: ["Parahippocampal Gyrus, anterior division"]
+  parahippocampal_post: ["Parahippocampal Gyrus, posterior division"]
+  temporal_pole: [Temporal Pole]
+  fusiform: ["Temporal Fusiform Cortex, anterior division", "Temporal Fusiform Cortex, posterior division"]
+  inferior_temporal: ["Inferior Temporal Gyrus, anterior division", "Inferior Temporal Gyrus, posterior division", "Inferior Temporal Gyrus, temporooccipital part"]
+  middle_temporal: ["Middle Temporal Gyrus, posterior division", "Middle Temporal Gyrus, temporooccipital part"]
+  precuneus: [Precuneous Cortex]          # sic: Harvard-Oxford spells it this way
+  posterior_cingulate: ["Cingulate Gyrus, posterior division"]
+  lateral_parietal: [Angular Gyrus, "Supramarginal Gyrus, posterior division"]
+  frontal: [Middle Frontal Gyrus, Superior Frontal Gyrus]
+  insula: [Insular Cortex]
+
+zscore:
+  covariates: [age, sex_m, etiv]
+  levels: [1, 2, 3]
+  min_patient_frac: 0.10
+
+sustain:
+  n_subtypes_max: 3
+  n_startpoints: 25
+  n_mcmc: 100000
+  parallel: false
+
+cv:
+  n_folds: 5
+
+analysis:
+  n_subtypes: auto
