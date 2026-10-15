@@ -71,6 +71,21 @@ def summarize(df: pd.DataFrame, features: list[str], samples_f: np.ndarray,
         "median_prob": float(staged["prob_subtype"].median()) if len(staged) else None,
         f"frac_above_{certainty_threshold}": float((staged["prob_subtype"] >= certainty_threshold).mean()) if len(staged) else None,
     }
+    # Who is in each subtype? A subtype made mostly of controls is likely noise, not disease.
+    out["subtype_by_group"] = {
+        int(s): {str(g): int(n) for g, n in grp["group"].value_counts().items()}
+        for s, grp in staged.groupby("subtype")}
+    pat_staged = staged[staged["is_patient"] == 1]
+    out["subtype_profiles_patients_only"] = (
+        pat_staged.groupby("subtype").agg(n=("stage", "size"), age=("age", "mean"), mmse=("mmse", "mean"),
+                                          cdr=("cdr", "mean"), stage=("stage", "mean"),
+                                          prob_subtype=("prob_subtype", "median"))
+        .round(3).reset_index().to_dict(orient="records"))
+    if pat_staged["subtype"].nunique() >= 2:
+        gs = [g["mmse"].dropna().to_numpy() for _, g in pat_staged.groupby("subtype")]
+        if all(len(g) >= 3 for g in gs):
+            h, p = stats.kruskal(*gs)
+            out["subtype_mmse_kruskal_patients"] = {"H": float(h), "p": float(p)}
     prof = staged.groupby("subtype").agg(n=("stage", "size"), age=("age", "mean"),
                                          mmse=("mmse", "mean"), stage=("stage", "mean"),
                                          male_frac=("sex_m", "mean"))
