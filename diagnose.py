@@ -1,0 +1,87 @@
+"""Sanity checks on the prepared data, before trusting any SuStaIn result.
+
+    python diagnose.py --config configs/quick.yaml
+
+1. Alignment: does every GM map filename contain the subject ID on the same metadata row?
+2. Known-truth check: regional GM should correlate positively with nWBV (OASIS's own
+   whole-brain volume measure) and negatively with age. If it does not, maps and
+   metadata are mismatched or the extraction is wrong.
+3. Signal: per-region effect size (CDR>0 vs CDR=0) and correlation with MMSE in patients.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from oasis_sustain import config, data  # noqa: E402
+import run  # noqa: E402
+
+
+def cohens_d(a, b):
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    s = np.sqrt(((len(a) - 1) * a.var(ddof=1) + (len(b) - 1) * b.var(ddof=1)) / (len(a) + len(b) - 2))
+    return (a.mean() - b.mean()) / s
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", required=True)
+    cfg = config.load_config(ap.parse_args().config)
+    dirs = config.run_dirs(cfg)
+    f = run._files(cfg, dirs)
+
+    print("=== 1. Alignment of GM maps and metadata ===")
+    meta = data.fetch_oasis(dirs["data"], cfg["cohort"]["n_subjects"])
+    names = meta["gm_path"].map(lambda p: os.path.basename(str(p)))
+    ok = np.array([str(i) in n for i, n in zip(meta["id"], names)])
+    print(f"{ok.sum()}/{len(ok)} rows: filename contains the row's subject ID")
+    print("First 3 pairs:")
+    for i, n in list(zip(meta["id"], names))[:3]:
+        print(f"  {i:<16} {n}")
+    if not ok.all():
+        print("MISMATCH on rows:", np.flatnonzero(~ok)[:10], "...")
+
+    print("\n=== 2. Known-truth correlations (expect GM~nWBV positive, GM~age negative) ===")
+    regional = pd.read_csv(f["regional"])
+    cohort = pd.read_csv(f["subjects"])
+    df = cohort.merge(regional, on="id", how="inner")
+    regions = [c for c in regional.columns if c != "id"]
+    rows = []
+    for r in regions:
+        pat, ctl = df[df.is_patient == 1], df[df.is_patient == 0]
+        rows.append({
+            "region": r,
+            "rho_nWBV": stats.spearmanr(df[r], df["nwbv"]).statistic if "nwbv" in df else np.nan,
+            "rho_age": stats.spearmanr(df[r], df["age"]).statistic,
+            "d_CDR>0_vs_0": cohens_d(pat[r], ctl[r]),
+            "rho_MMSE_pat": stats.spearmanr(pat[r], pat["mmse"], nan_policy="omit").statistic,
+        })
+    print(pd.DataFrame(rows).round(2).to_string(index=False))
+    if "nwbv" in df:
+        nw = stats.spearmanr(df["nwbv"], df["mmse"], nan_policy="omit")
+        nwp = df[df.is_patient == 1]
+        nwp_r = stats.spearmanr(nwp["nwbv"], nwp["mmse"], nan_policy="omit")
+        print(f"\nReference (OASIS's own nWBV, not our pipeline): rho(nWBV, MMSE) "
+              f"all = {nw.statistic:.2f}, patients only = {nwp_r.statistic:.2f}")
+
+    print("\n=== 3. Model inputs: mean z by group (atrophy is positive) ===")
+    d = run.load_npz(f["inputs"])
+    z = pd.DataFrame(d["z"], columns=[str(x) for x in d["labels"]])
+    z["group"] = np.where(d["is_patient"] == 1, "CDR>0", "CDR=0")
+    print(z.groupby("group").mean().T.round(2).to_string())
+    print("\nWhat good looks like: section 1 all rows match; section 2 rho_nWBV > 0.3, "
+          "rho_age < 0, d negative (patients have less GM), rho_MMSE_pat > 0; "
+          "section 3 CDR>0 means clearly above CDR=0.")
+
+
+if __name__ == "__main__":
+    main()

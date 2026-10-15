@@ -84,6 +84,12 @@ def step_prepare(cfg, dirs, f):
                              "region": worst, "robust_z": round(float(rz.iloc[i][worst]), 1)})
         keep = ~out
         cohort, X = cohort.loc[keep].reset_index(drop=True), X.loc[keep].reset_index(drop=True)
+    n_start = len(cohort) + len(excluded)
+    if len(excluded) > zc["max_exclude_frac"] * n_start:
+        raise RuntimeError(
+            f"QC would exclude {len(excluded)}/{n_start} subjects. That is not a few bad scans; "
+            f"it means disease effects exceed the threshold or the control spread is tiny. "
+            f"Inspect the data, or raise zscore.outlier_abs_z. First flagged: {excluded[:5]}")
     if excluded:
         print(f"QC: excluded {len(excluded)} subject(s) with |z| > {zc['outlier_abs_z']}:")
         print(pd.DataFrame(excluded).to_string(index=False))

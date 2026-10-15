@@ -152,6 +152,34 @@ def test_prepare_step_excludes_outliers_and_clips():
         assert (d["z"] <= d["Z_max"][None, :] + 1e-9).all() and (d["z"] >= -3 - 1e-9).all()
 
 
+def test_prepare_refuses_to_exclude_real_disease():
+    import run
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        cfg = config._merge(config.DEFAULTS, {
+            "name": "guard", "regions": {"r1": ["x"]},
+            "paths": {"data_dir": f"{tmp}/raw", "processed_dir": f"{tmp}/proc", "output_dir": f"{tmp}/out"},
+        })
+        dirs = config.run_dirs(cfg)
+        f = run._files(cfg, dirs)
+        meta = _fake_cohort(50, 50).drop(columns=["is_patient", "group"])
+        meta["gm_path"] = "unused"
+        # near-noiseless controls: every patient looks like a huge outlier
+        gm = pd.DataFrame({"id": meta["id"], "r1": 0.5 - 0.002 * meta.age - 0.03 * (meta.cdr > 0)
+                           + RNG.normal(0, 1e-6, len(meta))})
+        gm.to_csv(f["regional"], index=False)
+        orig = run.data.fetch_oasis
+        run.data.fetch_oasis = lambda *a, **k: meta.copy()
+        try:
+            run.step_prepare(cfg, dirs, f)
+            raised = False
+        except RuntimeError as e:
+            raised = "QC would exclude" in str(e)
+        finally:
+            run.data.fetch_oasis = orig
+        assert raised
+
+
 def test_analyze_step_end_to_end_with_fake_sustain_output():
     import run
 
