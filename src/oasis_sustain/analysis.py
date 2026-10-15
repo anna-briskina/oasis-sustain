@@ -18,6 +18,43 @@ def positional_variance(samples_sequence_s: np.ndarray, n_events: int) -> np.nda
     return P
 
 
+def leading_regions(samples_sequence, events: pd.DataFrame, labels: list[str], k: int = 3) -> dict:
+    """{subtype: first k regions} by expected position of each region's first (lowest-z) event."""
+    first = events[events.z == events.z.min()]
+    seqs = np.asarray(samples_sequence)
+    out = {}
+    for s in range(seqs.shape[0]):
+        P = positional_variance(seqs[s], len(events))
+        pos = {row.biomarker: (P[e] * np.arange(len(events))).sum() for e, row in first.iterrows()}
+        out[s + 1] = [b for b, _ in sorted(pos.items(), key=lambda x: x[1])[:k]]
+    return out
+
+
+def label_sequence_alignment(z: pd.DataFrame, subtype: np.ndarray, stage: np.ndarray,
+                             samples_sequence: np.ndarray, events: pd.DataFrame) -> np.ndarray:
+    """M[k, s] = Spearman between the early-stage atrophy profile of people labelled k+1 and
+    how early sequence s puts each region. A correct labelling has its maximum on the diagonal."""
+    labels = list(z.columns)
+    first = events[events.z == events.z.min()]
+    seqs = np.asarray(samples_sequence)
+    earliness = []
+    for s in range(seqs.shape[0]):
+        P = positional_variance(seqs[s], len(events))
+        pos = {row.biomarker: (P[e] * np.arange(len(events))).sum() for e, row in first.iterrows()}
+        earliness.append(np.array([-pos[b] for b in labels]))
+    subtype, stage = np.asarray(subtype), np.asarray(stage)
+    M = np.full((seqs.shape[0], seqs.shape[0]), np.nan)
+    for k in range(seqs.shape[0]):
+        mem = (subtype == k + 1) & (stage > 0)
+        if mem.sum() < 3:
+            continue
+        early = mem & (stage <= np.median(stage[mem]))
+        prof = z.loc[early].mean().to_numpy()
+        for s in range(seqs.shape[0]):
+            M[k, s] = stats.spearmanr(prof, earliness[s]).statistic
+    return M
+
+
 def subject_table(meta: pd.DataFrame, z: pd.DataFrame, res: dict) -> pd.DataFrame:
     df = meta.drop(columns=[c for c in ["gm_path"] if c in meta]).copy()
     df["stage"] = np.asarray(res["ml_stage"]).reshape(-1).astype(int)
