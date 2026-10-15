@@ -78,9 +78,46 @@ def main():
     z = pd.DataFrame(d["z"], columns=[str(x) for x in d["labels"]])
     z["group"] = np.where(d["is_patient"] == 1, "CDR>0", "CDR=0")
     print(z.groupby("group").mean().T.round(2).to_string())
-    print("\nWhat good looks like: section 1 all rows match; section 2 rho_nWBV > 0.3, "
-          "rho_age < 0, d negative (patients have less GM), rho_MMSE_pat > 0; "
-          "section 3 CDR>0 means clearly above CDR=0.")
+    print("\n(Section 2 uses RAW values. Modulated GM scales with head size, so raw correlations "
+          "with nWBV, which is already divided by head size, are confounded. Sections 4-5 adjust.)")
+
+    print("\n=== 4. Are the maps modulated? (total GM should track eTIV strongly) ===")
+    import nibabel as nib
+    m2 = df[["id", "age", "etiv", "nwbv", "sex_m"]].merge(meta[["id", "gm_path"]], on="id")
+    tot = []
+    for p in m2["gm_path"]:
+        img = nib.load(p)
+        vox_ml = float(np.prod(img.header.get_zooms()[:3])) / 1000.0
+        tot.append(float(np.asanyarray(img.dataobj, dtype=np.float32).sum()) * vox_ml)
+    m2["total_gm_ml"] = tot
+    print(f"total GM: mean {np.mean(tot):.0f} mL;  rho(total GM, eTIV) = "
+          f"{stats.spearmanr(m2.total_gm_ml, m2.etiv).statistic:.2f}")
+    frac = m2.total_gm_ml / m2.etiv
+    print(f"rho(total GM / eTIV, age) = {stats.spearmanr(frac, m2.age).statistic:.2f}   (expect clearly negative)")
+    print(f"rho(total GM / eTIV, nWBV) = {stats.spearmanr(frac, m2.nwbv).statistic:.2f}  (expect clearly positive)")
+
+    print("\n=== 5. Adjusted signal: pipeline z (atrophy +, adjusted for age/sex/eTIV on controls) ===")
+    from oasis_sustain import zscore as zs
+    covs = cfg["zscore"]["covariates"]
+    ctrl = df["is_patient"].to_numpy() == 0
+    zr, _ = zs.residual_zscores(df[regions], df, ctrl, covs)
+    zn, _ = zs.residual_zscores(df[["nwbv"]], df, ctrl, covs)  # same adjustment applied to nWBV
+    zr["nWBV (reference)"] = zn["nwbv"].to_numpy()
+    pat = df["is_patient"].to_numpy() == 1
+    rows = []
+    for c in zr.columns:
+        rows.append({
+            "feature": c,
+            "mean_z_CDR>0": zr.loc[pat, c].mean(),
+            "rho_MMSE_all": stats.spearmanr(zr[c], df["mmse"], nan_policy="omit").statistic,
+            "rho_MMSE_pat": stats.spearmanr(zr.loc[pat, c], df.loc[pat, "mmse"], nan_policy="omit").statistic,
+            "rho_CDR_all": stats.spearmanr(zr[c], df["cdr"]).statistic,
+        })
+    print(pd.DataFrame(rows).round(2).to_string(index=False))
+    print("\nWhat good looks like: section 4 rho(total GM, eTIV) high (> 0.6) and the two ratio "
+          "checks with the expected signs. Section 5: mean_z_CDR>0 clearly positive for medial "
+          "temporal regions; rho_MMSE negative, rho_CDR positive; regions in the same ballpark "
+          "as the nWBV reference row.")
 
 
 if __name__ == "__main__":
