@@ -28,7 +28,8 @@ DEFAULTS: dict = {
         "min_patient_frac": 0.10,         # keep a z level only if >= this fraction of patients reach it
         "z_max_percentile": 99,
         "outlier_abs_z": 8,               # |z| beyond this in any region -> excluded as QC failure
-        "clip_min": -3,                   # lower clip; upper clip is each biomarker's Z_max
+        "max_exclude_frac": 0.05,         # abort if QC would drop more than this fraction
+        "clip_min": -3,                  # lower clip; upper clip is each biomarker's Z_max
     },
     "sustain": {
         "n_subtypes_max": 3,
