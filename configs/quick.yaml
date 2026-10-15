@@ -5,7 +5,7 @@ seed: 42
 
 cohort:
   min_age: 60
-  dartel_version: false   # DARTEL maps failed the GM-fraction-vs-age check; see README
+  dartel_version: false   # DARTEL maps failed the GM-fraction-vs-age check; see TECHNICAL.md
 
 regions:
   hippocampus: [Left Hippocampus, Right Hippocampus]
