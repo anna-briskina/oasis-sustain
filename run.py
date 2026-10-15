@@ -168,11 +168,21 @@ def step_analyze(cfg, dirs, f):
     d = load_npz(f["inputs"])
     labels = [str(x) for x in d["labels"]]
     n = cfg["analysis"]["n_subtypes"]
+    if f["cv"].exists():
+        cvd = load_npz(f["cv"])
+        print("CVIC by number of subtypes:", np.round(cvd["cvic"], 1))
+        ll = np.asarray(cvd["loglike"], float)  # (folds, n_subtypes) held-out log-likelihood
+        for k in range(1, ll.shape[1]):
+            diff = ll[:, k] - ll[:, k - 1]
+            print(f"  {k + 1} vs {k} subtypes: better in {int((diff > 0).sum())}/{len(diff)} folds; "
+                  f"held-out log-lik gain per fold {diff.mean():+.1f} (range {diff.min():+.1f} to {diff.max():+.1f})")
     if n == "auto":
         if not f["cv"].exists():
             sys.exit("n_subtypes is 'auto' but no CV results; run 'cv' or set n_subtypes.")
         n = int(np.argmin(load_npz(f["cv"])["cvic"]) + 1)
         print(f"Selected {n} subtype(s) by lowest CVIC")
+    else:
+        print(f"Analysing {n} subtype(s) (set explicitly)")
     res = model.load_result(dirs["sustain"], cfg["name"], int(n))
     cohort = pd.read_csv(f["subjects"])
     z = pd.DataFrame(d["z"], columns=labels)
@@ -196,8 +206,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--steps", default=",".join(STEPS))
+    ap.add_argument("--n-subtypes", type=int, default=None,
+                    help="analyse this many subtypes instead of the CVIC choice (no refit needed)")
     a = ap.parse_args()
     cfg = config.load_config(a.config)
+    if a.n_subtypes is not None:
+        cfg["analysis"]["n_subtypes"] = a.n_subtypes
     dirs = config.run_dirs(cfg)
     f = _files(cfg, dirs)
     for step in a.steps.split(","):
