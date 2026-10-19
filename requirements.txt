@@ -1,0 +1,9 @@
+numpy
+scipy
+pandas
+scikit-learn
+matplotlib
+pyyaml
+nibabel
+nilearn>=0.10
+pySuStaIn @ git+https://github.com/ucl-pond/pySuStaIn

@@ -1,0 +1,32 @@
+# Smoke test: small model, short chains. Runs in minutes and checks every step works
+# end to end. Results are NOT meant to be interpreted.
+name: oasis1_quick_spm8
+seed: 42
+
+cohort:
+  min_age: 60
+  dartel_version: false   # DARTEL maps failed the GM-fraction-vs-age check; see README.md (Checking my own work)
+
+regions:
+  hippocampus: [Left Hippocampus, Right Hippocampus]
+  amygdala: [Left Amygdala, Right Amygdala]
+  parahippocampal_ant: ["Parahippocampal Gyrus, anterior division"]
+  temporal_pole: [Temporal Pole]
+  inferior_temporal: ["Inferior Temporal Gyrus, anterior division", "Inferior Temporal Gyrus, posterior division"]
+  precuneus: [Precuneous Cortex]
+  lateral_parietal: [Angular Gyrus, "Supramarginal Gyrus, posterior division"]
+  frontal: [Middle Frontal Gyrus, Superior Frontal Gyrus]
+
+zscore:
+  levels: [1, 2]
+
+sustain:
+  n_subtypes_max: 2
+  n_startpoints: 10
+  n_mcmc: 10000
+
+cv:
+  n_folds: 3
+
+analysis:
+  n_subtypes: auto

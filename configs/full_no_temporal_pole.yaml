@@ -1,0 +1,46 @@
+# Sensitivity analysis: full.yaml minus the temporal pole (12 regions).
+# Why: its mask had the lowest grey-matter coverage (mean GM 0.24 vs 0.35-0.57 elsewhere),
+# the weakest patient effect, and no MMSE association, yet it was the first event of subtype 2
+# in the quick run. If the subtype split survives without it, it is not driven by one noisy region.
+# Expect several hours on a laptop CPU (CV refits every fold); set sustain.parallel: true
+# to use pathos multiprocessing across start points.
+name: oasis1_full_spm8_no_temporal_pole
+seed: 42
+
+cohort:
+  min_age: 60
+  dartel_version: false   # DARTEL maps failed the GM-fraction-vs-age check; see README.md (Checking my own work)
+
+# Regions chosen from the AD literature BEFORE looking at the data, so the feature set
+# is not tuned on the same subjects SuStaIn is fit to. Labels are Harvard-Oxford names
+# (both hemispheres averaged together, voxel-weighted).
+regions:
+  hippocampus: [Left Hippocampus, Right Hippocampus]
+  amygdala: [Left Amygdala, Right Amygdala]
+  parahippocampal_ant: ["Parahippocampal Gyrus, anterior division"]
+  parahippocampal_post: ["Parahippocampal Gyrus, posterior division"]
+  fusiform: ["Temporal Fusiform Cortex, anterior division", "Temporal Fusiform Cortex, posterior division"]
+  inferior_temporal: ["Inferior Temporal Gyrus, anterior division", "Inferior Temporal Gyrus, posterior division", "Inferior Temporal Gyrus, temporooccipital part"]
+  middle_temporal: ["Middle Temporal Gyrus, posterior division", "Middle Temporal Gyrus, temporooccipital part"]
+  precuneus: [Precuneous Cortex]          # sic: Harvard-Oxford spells it this way
+  posterior_cingulate: ["Cingulate Gyrus, posterior division"]
+  lateral_parietal: [Angular Gyrus, "Supramarginal Gyrus, posterior division"]
+  frontal: [Middle Frontal Gyrus, Superior Frontal Gyrus]
+  insula: [Insular Cortex]
+
+zscore:
+  covariates: [age, sex_m, etiv]
+  levels: [1, 2, 3]
+  min_patient_frac: 0.10
+
+sustain:
+  n_subtypes_max: 3
+  n_startpoints: 25
+  n_mcmc: 100000
+  parallel: false
+
+cv:
+  n_folds: 5
+
+analysis:
+  n_subtypes: auto
